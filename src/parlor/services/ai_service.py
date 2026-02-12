@@ -7,6 +7,7 @@ import json
 import logging
 from typing import Any, AsyncGenerator
 
+import httpx
 from openai import AsyncOpenAI
 
 from ..config import AIConfig
@@ -17,10 +18,13 @@ logger = logging.getLogger(__name__)
 class AIService:
     def __init__(self, config: AIConfig) -> None:
         self.config = config
-        self.client = AsyncOpenAI(
-            base_url=config.base_url,
-            api_key=config.api_key,
-        )
+        kwargs: dict[str, Any] = {
+            "base_url": config.base_url,
+            "api_key": config.api_key,
+        }
+        if not config.verify_ssl:
+            kwargs["http_client"] = httpx.AsyncClient(verify=False)
+        self.client = AsyncOpenAI(**kwargs)
 
     async def stream_chat(
         self,

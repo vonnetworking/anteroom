@@ -17,6 +17,7 @@ class AIConfig:
     api_key: str
     model: str = "gpt-4"
     system_prompt: str = "You are a helpful assistant."
+    verify_ssl: bool = True
 
 
 @dataclass
@@ -74,11 +75,15 @@ def load_config(config_path: Path | None = None) -> AppConfig:
             f"AI api_key is required. Set 'ai.api_key' in config.yaml ({path}) or AI_CHAT_API_KEY environment variable."
         )
 
+    verify_ssl_raw = ai_raw.get("verify_ssl", os.environ.get("AI_CHAT_VERIFY_SSL", "true"))
+    verify_ssl = str(verify_ssl_raw).lower() not in ("false", "0", "no")
+
     ai = AIConfig(
         base_url=base_url,
         api_key=api_key,
         model=model,
         system_prompt=system_prompt,
+        verify_ssl=verify_ssl,
     )
 
     app_raw = raw.get("app", {})
