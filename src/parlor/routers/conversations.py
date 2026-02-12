@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request
@@ -76,7 +77,8 @@ async def export_conversation(conversation_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Conversation not found")
     messages = storage.list_messages(db, conversation_id)
     markdown = export_conversation_markdown(conv, messages)
-    filename = re.sub(r"[^\w\s\-]", "", conv["title"])[:50].strip() or "conversation"
+    safe_title = "".join(c for c in conv["title"] if unicodedata.category(c)[0] not in ("C",))
+    filename = re.sub(r"[^\w\s\-]", "", safe_title)[:50].strip() or "conversation"
     return PlainTextResponse(
         content=markdown,
         media_type="text/markdown",

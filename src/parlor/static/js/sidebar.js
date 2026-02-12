@@ -37,25 +37,51 @@ const Sidebar = (() => {
 
     function render() {
         const list = document.getElementById('conversation-list');
+        list.innerHTML = '';
+
         if (conversations.length === 0) {
-            list.innerHTML = '<div class="empty-state">No conversations yet</div>';
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.textContent = 'No conversations yet';
+            list.appendChild(empty);
             return;
         }
-        list.innerHTML = conversations.map(c => `
-            <div class="conversation-item ${c.id === App.state.currentConversationId ? 'active' : ''}"
-                 data-id="${c.id}">
-                <span class="conv-title">${Chat.escapeHtml(c.title)}</span>
-                <span class="conv-actions">
-                    <button onclick="event.stopPropagation(); Sidebar.rename('${c.id}')" title="Rename">&#9998;</button>
-                    <button onclick="event.stopPropagation(); Sidebar.exportConv('${c.id}')" title="Export">&#8681;</button>
-                    <button onclick="event.stopPropagation(); Sidebar.remove('${c.id}')" title="Delete">&#10005;</button>
-                </span>
-            </div>
-        `).join('');
 
-        list.querySelectorAll('.conversation-item').forEach(el => {
-            el.addEventListener('click', () => select(el.dataset.id));
-            el.addEventListener('dblclick', () => rename(el.dataset.id));
+        conversations.forEach(c => {
+            const div = document.createElement('div');
+            div.className = `conversation-item ${c.id === App.state.currentConversationId ? 'active' : ''}`;
+            div.dataset.id = c.id;
+
+            const title = document.createElement('span');
+            title.className = 'conv-title';
+            title.textContent = c.title;
+            div.appendChild(title);
+
+            const actions = document.createElement('span');
+            actions.className = 'conv-actions';
+
+            const renameBtn = document.createElement('button');
+            renameBtn.title = 'Rename';
+            renameBtn.innerHTML = '&#9998;';
+            renameBtn.addEventListener('click', (e) => { e.stopPropagation(); rename(c.id); });
+            actions.appendChild(renameBtn);
+
+            const exportBtn = document.createElement('button');
+            exportBtn.title = 'Export';
+            exportBtn.innerHTML = '&#8681;';
+            exportBtn.addEventListener('click', (e) => { e.stopPropagation(); exportConv(c.id); });
+            actions.appendChild(exportBtn);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.title = 'Delete';
+            deleteBtn.innerHTML = '&#10005;';
+            deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); remove(c.id); });
+            actions.appendChild(deleteBtn);
+
+            div.appendChild(actions);
+            div.addEventListener('click', () => select(c.id));
+            div.addEventListener('dblclick', () => rename(c.id));
+            list.appendChild(div);
         });
     }
 
@@ -70,15 +96,22 @@ const Sidebar = (() => {
         });
     }
 
+    function _findItemById(id) {
+        return [...document.querySelectorAll('.conversation-item')].find(el => el.dataset.id === id);
+    }
+
     function updateTitle(id, title) {
-        const el = document.querySelector(`.conversation-item[data-id="${id}"] .conv-title`);
-        if (el) el.textContent = title;
+        const item = _findItemById(id);
+        if (item) {
+            const el = item.querySelector('.conv-title');
+            if (el) el.textContent = title;
+        }
         const conv = conversations.find(c => c.id === id);
         if (conv) conv.title = title;
     }
 
     async function rename(id) {
-        const item = document.querySelector(`.conversation-item[data-id="${id}"]`);
+        const item = _findItemById(id);
         if (!item) return;
         const titleEl = item.querySelector('.conv-title');
         const currentTitle = titleEl.textContent;
@@ -126,9 +159,7 @@ const Sidebar = (() => {
 
     async function exportConv(id) {
         try {
-            const exportHeaders = {};
-            if (window.__PARLOR_TOKEN) exportHeaders['Authorization'] = `Bearer ${window.__PARLOR_TOKEN}`;
-            const response = await fetch(`/api/conversations/${id}/export`, { headers: exportHeaders });
+            const response = await fetch(`/api/conversations/${id}/export`, { credentials: 'same-origin' });
             if (!response.ok) throw new Error('Export failed');
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);

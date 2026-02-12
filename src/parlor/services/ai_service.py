@@ -126,4 +126,5 @@ class AIService:
             model_ids = [m.id for m in models.data]
             return True, "Connected successfully", model_ids
         except Exception as e:
-            return False, f"Connection failed: {e}", []
+            logger.error("AI connection validation failed: %s", e)
+            return False, "Connection to AI service failed", []

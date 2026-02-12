@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from parlor.db import _FTS_SCHEMA, _FTS_TRIGGERS, _SCHEMA
+from parlor.db import _FTS_SCHEMA, _FTS_TRIGGERS, _SCHEMA, ThreadSafeConnection
 from parlor.services.storage import (
     create_conversation,
     create_message,
@@ -23,7 +23,7 @@ from parlor.services.storage import (
 
 
 @pytest.fixture()
-def db() -> sqlite3.Connection:
+def db() -> ThreadSafeConnection:
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
@@ -34,7 +34,7 @@ def db() -> sqlite3.Connection:
     except sqlite3.OperationalError:
         pass
     conn.commit()
-    return conn
+    return ThreadSafeConnection(conn)
 
 
 class TestConversations:

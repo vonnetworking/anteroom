@@ -36,7 +36,7 @@ def create_conversation(db: sqlite3.Connection, title: str = "New Conversation")
 
 
 def get_conversation(db: sqlite3.Connection, conversation_id: str) -> dict[str, Any] | None:
-    row = db.execute("SELECT * FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+    row = db.execute_fetchone("SELECT * FROM conversations WHERE id = ?", (conversation_id,))
     if not row:
         return None
     return dict(row)
@@ -48,10 +48,18 @@ def _sanitize_fts_query(query: str) -> str:
     return f'"{safe}"'
 
 
-def list_conversations(db: sqlite3.Connection, search: str | None = None) -> list[dict[str, Any]]:
+DEFAULT_PAGE_LIMIT = 100
+
+
+def list_conversations(
+    db: sqlite3.Connection,
+    search: str | None = None,
+    limit: int = DEFAULT_PAGE_LIMIT,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
     if search:
         safe_search = _sanitize_fts_query(search)
-        rows = db.execute(
+        rows = db.execute_fetchall(
             """
             SELECT c.id, c.title, c.created_at, c.updated_at,
                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as message_count
@@ -59,18 +67,21 @@ def list_conversations(db: sqlite3.Connection, search: str | None = None) -> lis
             JOIN conversations_fts fts ON fts.conversation_id = c.id
             WHERE conversations_fts MATCH ?
             ORDER BY c.updated_at DESC
+            LIMIT ? OFFSET ?
             """,
-            (safe_search,),
-        ).fetchall()
+            (safe_search, limit, offset),
+        )
     else:
-        rows = db.execute(
+        rows = db.execute_fetchall(
             """
             SELECT c.id, c.title, c.created_at, c.updated_at,
                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as message_count
             FROM conversations c
             ORDER BY c.updated_at DESC
+            LIMIT ? OFFSET ?
             """,
-        ).fetchall()
+            (limit, offset),
+        )
     return [dict(r) for r in rows]
 
 
@@ -107,20 +118,20 @@ def create_message(
 ) -> dict[str, Any]:
     mid = _uuid()
     now = _now()
-    pos_row = db.execute(
-        "SELECT COALESCE(MAX(position), -1) + 1 FROM messages WHERE conversation_id = ?",
-        (conversation_id,),
-    ).fetchone()
-    position = pos_row[0]
-    db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, created_at, position) VALUES (?, ?, ?, ?, ?, ?)",
-        (mid, conversation_id, role, content, now, position),
-    )
-    db.execute(
-        "UPDATE conversations SET updated_at = ? WHERE id = ?",
-        (now, conversation_id),
-    )
-    db.commit()
+    with db.transaction() as conn:
+        pos_row = conn.execute(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM messages WHERE conversation_id = ?",
+            (conversation_id,),
+        ).fetchone()
+        position = pos_row[0]
+        conn.execute(
+            "INSERT INTO messages (id, conversation_id, role, content, created_at, position) VALUES (?, ?, ?, ?, ?, ?)",
+            (mid, conversation_id, role, content, now, position),
+        )
+        conn.execute(
+            "UPDATE conversations SET updated_at = ? WHERE id = ?",
+            (now, conversation_id),
+        )
     return {
         "id": mid,
         "conversation_id": conversation_id,
@@ -132,10 +143,10 @@ def create_message(
 
 
 def list_messages(db: sqlite3.Connection, conversation_id: str) -> list[dict[str, Any]]:
-    rows = db.execute(
+    rows = db.execute_fetchall(
         "SELECT * FROM messages WHERE conversation_id = ? ORDER BY position",
         (conversation_id,),
-    ).fetchall()
+    )
     messages = []
     for row in rows:
         msg = dict(row)
@@ -150,7 +161,6 @@ def list_messages(db: sqlite3.Connection, conversation_id: str) -> list[dict[str
 ALLOWED_MIME_TYPES = {
     "text/plain",
     "text/markdown",
-    "text/html",
     "text/css",
     "text/csv",
     "text/xml",
@@ -221,14 +231,14 @@ def save_attachment(
 
 
 def get_attachment(db: sqlite3.Connection, attachment_id: str) -> dict[str, Any] | None:
-    row = db.execute("SELECT * FROM attachments WHERE id = ?", (attachment_id,)).fetchone()
+    row = db.execute_fetchone("SELECT * FROM attachments WHERE id = ?", (attachment_id,))
     if not row:
         return None
     return dict(row)
 
 
 def list_attachments(db: sqlite3.Connection, message_id: str) -> list[dict[str, Any]]:
-    rows = db.execute("SELECT * FROM attachments WHERE message_id = ?", (message_id,)).fetchall()
+    rows = db.execute_fetchall("SELECT * FROM attachments WHERE message_id = ?", (message_id,))
     return [dict(r) for r in rows]
 
 
@@ -277,7 +287,7 @@ def update_tool_call(
 
 
 def list_tool_calls(db: sqlite3.Connection, message_id: str) -> list[dict[str, Any]]:
-    rows = db.execute("SELECT * FROM tool_calls WHERE message_id = ?", (message_id,)).fetchall()
+    rows = db.execute_fetchall("SELECT * FROM tool_calls WHERE message_id = ?", (message_id,))
     result = []
     for r in rows:
         d = dict(r)

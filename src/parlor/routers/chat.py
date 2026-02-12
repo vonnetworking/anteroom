@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import uuid as uuid_mod
+from collections import defaultdict
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -18,7 +19,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
-_cancel_events: dict[str, asyncio.Event] = {}
+MAX_FILES_PER_REQUEST = 10
+
+SAFE_INLINE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+
+_cancel_events: dict[str, set[asyncio.Event]] = defaultdict(set)
 
 
 def _validate_uuid(value: str) -> str:
@@ -47,6 +52,8 @@ async def chat(conversation_id: str, request: Request) -> EventSourceResponse:
         form = await request.form()
         message_text = str(form.get("message", ""))
         files = form.getlist("files")
+        if len(files) > MAX_FILES_PER_REQUEST:
+            raise HTTPException(status_code=400, detail=f"Maximum {MAX_FILES_PER_REQUEST} files per request")
     else:
         body = await request.json()
         message_text = body.get("message", "")
@@ -54,7 +61,6 @@ async def chat(conversation_id: str, request: Request) -> EventSourceResponse:
 
     user_msg = storage.create_message(db, conversation_id, "user", message_text)
 
-    # Save attachments if any (Phase 5 will fully implement)
     attachment_contents: list[dict[str, Any]] = []
     if files:
         data_dir = request.app.state.config.app.data_dir
@@ -83,7 +89,7 @@ async def chat(conversation_id: str, request: Request) -> EventSourceResponse:
                         pass
 
     cancel_event = asyncio.Event()
-    _cancel_events[conversation_id] = cancel_event
+    _cancel_events[conversation_id].add(cancel_event)
 
     ai_service = _get_ai_service(request)
 
@@ -216,7 +222,9 @@ async def chat(conversation_id: str, request: Request) -> EventSourceResponse:
             logger.exception("Chat stream error")
             yield {"event": "error", "data": json.dumps({"message": "An internal error occurred"})}
         finally:
-            _cancel_events.pop(conversation_id, None)
+            _cancel_events.get(conversation_id, set()).discard(cancel_event)
+            if not _cancel_events.get(conversation_id):
+                _cancel_events.pop(conversation_id, None)
 
     return EventSourceResponse(event_generator())
 
@@ -229,8 +237,8 @@ async def stop_generation(conversation_id: str, request: Request):
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    event = _cancel_events.get(conversation_id)
-    if event:
+    events = _cancel_events.get(conversation_id, set())
+    for event in events:
         event.set()
     return {"status": "stopped"}
 
@@ -250,4 +258,11 @@ async def get_attachment(attachment_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Attachment file missing")
     from fastapi.responses import FileResponse
 
-    return FileResponse(str(file_path), media_type=att["mime_type"], filename=att["filename"])
+    media_type = att["mime_type"]
+    disposition = "inline" if media_type in SAFE_INLINE_TYPES else "attachment"
+    return FileResponse(
+        str(file_path),
+        media_type=media_type,
+        filename=att["filename"],
+        headers={"Content-Disposition": f'{disposition}; filename="{att["filename"]}"'},
+    )

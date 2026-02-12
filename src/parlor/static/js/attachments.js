@@ -6,7 +6,7 @@ const Attachments = (() => {
 
     const ALLOWED_EXTENSIONS = new Set([
         'txt', 'md', 'py', 'js', 'ts', 'json', 'yaml', 'yml', 'csv',
-        'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'html', 'css',
+        'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'css',
         'xml', 'log', 'sh', 'bat', 'ps1', 'sql', 'toml', 'ini', 'cfg',
         'java', 'c', 'cpp', 'h', 'hpp', 'rs', 'go', 'rb', 'php',
     ]);

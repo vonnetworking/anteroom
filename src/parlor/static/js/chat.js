@@ -5,6 +5,15 @@ const Chat = (() => {
     let currentAssistantEl = null;
     let currentAssistantContent = '';
 
+    // Configure marked for safe link rendering
+    const renderer = new marked.Renderer();
+    const originalLink = renderer.link.bind(renderer);
+    renderer.link = function(href, title, text) {
+        const html = originalLink(href, title, text);
+        return html.replace('<a ', '<a target="_blank" rel="noopener noreferrer" ');
+    };
+    marked.use({ renderer });
+
     function init() {
         const sendBtn = document.getElementById('btn-send');
         const stopBtn = document.getElementById('btn-stop');
@@ -55,8 +64,6 @@ const Chat = (() => {
 
         let body;
         let headers = {};
-        const token = window.__PARLOR_TOKEN;
-        if (token) headers['Authorization'] = `Bearer ${token}`;
         if (files.length > 0) {
             const formData = new FormData();
             formData.append('message', text);
@@ -72,6 +79,7 @@ const Chat = (() => {
                 method: 'POST',
                 headers,
                 body,
+                credentials: 'same-origin',
             });
 
             if (!response.ok) {
@@ -85,6 +93,7 @@ const Chat = (() => {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
+            let eventType = null;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -96,10 +105,16 @@ const Chat = (() => {
 
                 for (const line of lines) {
                     if (line.startsWith('event: ')) {
-                        var eventType = line.slice(7).trim();
+                        eventType = line.slice(7).trim();
                     } else if (line.startsWith('data: ') && eventType) {
-                        const data = JSON.parse(line.slice(6));
-                        handleSSEEvent(eventType, data);
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            if (data && typeof data === 'object') {
+                                handleSSEEvent(eventType, data);
+                            }
+                        } catch (e) {
+                            console.warn('Failed to parse SSE data:', e);
+                        }
                         eventType = null;
                     }
                 }
@@ -197,7 +212,21 @@ const Chat = (() => {
             return mathBlocks[parseInt(idx)];
         });
 
-        return html;
+        // Sanitize HTML to prevent XSS
+        return DOMPurify.sanitize(html, {
+            ALLOWED_TAGS: [
+                'p', 'br', 'strong', 'em', 'code', 'pre', 'blockquote',
+                'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+                'hr', 'del', 'details', 'summary', 'span', 'div', 'sup', 'sub',
+                'dl', 'dt', 'dd', 'kbd', 'var', 'samp', 'abbr', 'mark',
+            ],
+            ALLOWED_ATTR: [
+                'href', 'src', 'alt', 'title', 'class', 'id',
+                'target', 'rel', 'open', 'colspan', 'rowspan',
+            ],
+            ALLOW_DATA_ATTR: false,
+        });
     }
 
     function renderMath(el) {
@@ -233,18 +262,23 @@ const Chat = (() => {
             const lang = (code.className.match(/language-(\w+)/) || [])[1] || '';
             const header = document.createElement('div');
             header.className = 'code-header';
-            header.innerHTML = `<span>${lang}</span><button class="btn-copy-code">Copy</button>`;
-            pre.insertBefore(header, code);
 
-            header.querySelector('.btn-copy-code').addEventListener('click', () => {
+            const langSpan = document.createElement('span');
+            langSpan.textContent = lang;
+            header.appendChild(langSpan);
+
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'btn-copy-code';
+            copyBtn.textContent = 'Copy';
+            copyBtn.addEventListener('click', () => {
                 navigator.clipboard.writeText(code.textContent).then(() => {
-                    header.querySelector('.btn-copy-code').textContent = 'Copied!';
-                    setTimeout(() => {
-                        header.querySelector('.btn-copy-code').textContent = 'Copy';
-                    }, 2000);
+                    copyBtn.textContent = 'Copied!';
+                    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
                 });
             });
+            header.appendChild(copyBtn);
 
+            pre.insertBefore(header, code);
             hljs.highlightElement(code);
         });
     }
@@ -252,16 +286,21 @@ const Chat = (() => {
     function addMessageCopyButton(msgEl, content) {
         const actions = document.createElement('div');
         actions.className = 'message-actions';
-        actions.innerHTML = '<button class="btn-copy-message">Copy</button>';
-        actions.querySelector('.btn-copy-message').addEventListener('click', () => {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn-copy-message';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', () => {
             navigator.clipboard.writeText(content).then(() => {
-                actions.querySelector('.btn-copy-message').textContent = 'Copied!';
-                setTimeout(() => {
-                    actions.querySelector('.btn-copy-message').textContent = 'Copy';
-                }, 2000);
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
             });
         });
+        actions.appendChild(copyBtn);
         msgEl.appendChild(actions);
+    }
+
+    function _sanitizeId(id) {
+        return String(id).replace(/[^a-zA-Z0-9\-_]/g, '');
     }
 
     function appendMessage(role, content) {
@@ -271,10 +310,20 @@ const Chat = (() => {
 
         const el = document.createElement('div');
         el.className = `message ${role}`;
-        el.innerHTML = `
-            <div class="message-role">${role === 'user' ? 'You' : 'Assistant'}</div>
-            <div class="message-content">${role === 'user' ? escapeHtml(content) : renderMarkdown(content)}</div>
-        `;
+
+        const roleDiv = document.createElement('div');
+        roleDiv.className = 'message-role';
+        roleDiv.textContent = role === 'user' ? 'You' : 'Assistant';
+        el.appendChild(roleDiv);
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        if (role === 'user') {
+            contentDiv.textContent = content;
+        } else {
+            contentDiv.innerHTML = renderMarkdown(content);
+        }
+        el.appendChild(contentDiv);
 
         if (role === 'user') {
             const files = Attachments.getFiles();
@@ -319,11 +368,19 @@ const Chat = (() => {
     function showError(msgEl, message) {
         const errDiv = document.createElement('div');
         errDiv.className = 'error-message';
-        errDiv.innerHTML = `Error: ${escapeHtml(message)} <button class="btn-retry">Retry</button>`;
-        errDiv.querySelector('.btn-retry').addEventListener('click', () => {
+
+        const errText = document.createElement('span');
+        errText.textContent = `Error: ${message}`;
+        errDiv.appendChild(errText);
+
+        const retryBtn = document.createElement('button');
+        retryBtn.className = 'btn-retry';
+        retryBtn.textContent = 'Retry';
+        retryBtn.addEventListener('click', () => {
             errDiv.remove();
             sendMessage();
         });
+        errDiv.appendChild(retryBtn);
 
         if (msgEl) {
             msgEl.appendChild(errDiv);
@@ -338,31 +395,46 @@ const Chat = (() => {
         const contentEl = currentAssistantEl.querySelector('.message-content');
         const details = document.createElement('details');
         details.className = 'tool-call';
-        details.id = `tool-${data.id}`;
-        details.innerHTML = `
-            <summary>Tool: ${escapeHtml(data.tool_name)} <span class="tool-spinner"></span></summary>
-            <div class="tool-content">
-                <strong>Input:</strong>
-                <pre><code>${escapeHtml(JSON.stringify(data.input, null, 2))}</code></pre>
-            </div>
-        `;
+        details.id = `tool-${_sanitizeId(data.id)}`;
+
+        const summary = document.createElement('summary');
+        summary.textContent = `Tool: ${data.tool_name} `;
+        const spinner = document.createElement('span');
+        spinner.className = 'tool-spinner';
+        summary.appendChild(spinner);
+        details.appendChild(summary);
+
+        const toolContent = document.createElement('div');
+        toolContent.className = 'tool-content';
+        const inputLabel = document.createElement('strong');
+        inputLabel.textContent = 'Input:';
+        toolContent.appendChild(inputLabel);
+        const inputPre = document.createElement('pre');
+        const inputCode = document.createElement('code');
+        inputCode.textContent = JSON.stringify(data.input, null, 2);
+        inputPre.appendChild(inputCode);
+        toolContent.appendChild(inputPre);
+
+        details.appendChild(toolContent);
         contentEl.appendChild(details);
         scrollToBottom();
     }
 
     function renderToolCallEnd(data) {
-        const details = document.getElementById(`tool-${data.id}`);
+        const details = document.getElementById(`tool-${_sanitizeId(data.id)}`);
         if (!details) return;
         const spinner = details.querySelector('.tool-spinner');
         if (spinner) spinner.remove();
 
         const toolContent = details.querySelector('.tool-content');
-        const outputDiv = document.createElement('div');
-        outputDiv.innerHTML = `
-            <strong>Output (${data.status}):</strong>
-            <pre><code>${escapeHtml(JSON.stringify(data.output, null, 2))}</code></pre>
-        `;
-        toolContent.appendChild(outputDiv);
+        const outputLabel = document.createElement('strong');
+        outputLabel.textContent = `Output (${data.status}):`;
+        toolContent.appendChild(outputLabel);
+        const outputPre = document.createElement('pre');
+        const outputCode = document.createElement('code');
+        outputCode.textContent = JSON.stringify(data.output, null, 2);
+        outputPre.appendChild(outputCode);
+        toolContent.appendChild(outputPre);
     }
 
     function setStreaming(streaming) {
@@ -404,15 +476,24 @@ const Chat = (() => {
         messages.forEach(msg => {
             const el = document.createElement('div');
             el.className = `message ${msg.role}`;
-            const content = msg.role === 'user' ? escapeHtml(msg.content) : renderMarkdown(msg.content);
-            el.innerHTML = `
-                <div class="message-role">${msg.role === 'user' ? 'You' : 'Assistant'}</div>
-                <div class="message-content">${content}</div>
-            `;
+
+            const roleDiv = document.createElement('div');
+            roleDiv.className = 'message-role';
+            roleDiv.textContent = msg.role === 'user' ? 'You' : 'Assistant';
+            el.appendChild(roleDiv);
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            if (msg.role === 'user') {
+                contentDiv.textContent = msg.content;
+            } else {
+                contentDiv.innerHTML = renderMarkdown(msg.content);
+            }
+            el.appendChild(contentDiv);
 
             if (msg.role === 'assistant') {
-                renderMath(el.querySelector('.message-content'));
-                addCodeCopyButtons(el.querySelector('.message-content'));
+                renderMath(contentDiv);
+                addCodeCopyButtons(contentDiv);
                 addMessageCopyButton(el, msg.content);
             }
 
@@ -432,14 +513,35 @@ const Chat = (() => {
                 msg.tool_calls.forEach(tc => {
                     const details = document.createElement('details');
                     details.className = 'tool-call';
-                    details.innerHTML = `
-                        <summary>Tool: ${escapeHtml(tc.tool_name)} (${tc.status})</summary>
-                        <div class="tool-content">
-                            <strong>Input:</strong>
-                            <pre><code>${escapeHtml(JSON.stringify(tc.input, null, 2))}</code></pre>
-                            ${tc.output ? `<strong>Output:</strong><pre><code>${escapeHtml(JSON.stringify(tc.output, null, 2))}</code></pre>` : ''}
-                        </div>
-                    `;
+
+                    const summary = document.createElement('summary');
+                    summary.textContent = `Tool: ${tc.tool_name} (${tc.status})`;
+                    details.appendChild(summary);
+
+                    const toolContent = document.createElement('div');
+                    toolContent.className = 'tool-content';
+
+                    const inputLabel = document.createElement('strong');
+                    inputLabel.textContent = 'Input:';
+                    toolContent.appendChild(inputLabel);
+                    const inputPre = document.createElement('pre');
+                    const inputCode = document.createElement('code');
+                    inputCode.textContent = JSON.stringify(tc.input, null, 2);
+                    inputPre.appendChild(inputCode);
+                    toolContent.appendChild(inputPre);
+
+                    if (tc.output) {
+                        const outputLabel = document.createElement('strong');
+                        outputLabel.textContent = 'Output:';
+                        toolContent.appendChild(outputLabel);
+                        const outputPre = document.createElement('pre');
+                        const outputCode = document.createElement('code');
+                        outputCode.textContent = JSON.stringify(tc.output, null, 2);
+                        outputPre.appendChild(outputCode);
+                        toolContent.appendChild(outputPre);
+                    }
+
+                    details.appendChild(toolContent);
                     el.querySelector('.message-content').appendChild(details);
                 });
             }

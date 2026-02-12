@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 _SCHEMA = """
@@ -115,6 +116,14 @@ class ThreadSafeConnection:
         with self._lock:
             return self._conn.execute(sql, parameters)
 
+    def execute_fetchone(self, sql: str, parameters: tuple = ()) -> sqlite3.Row | None:
+        with self._lock:
+            return self._conn.execute(sql, parameters).fetchone()
+
+    def execute_fetchall(self, sql: str, parameters: tuple = ()) -> list[sqlite3.Row]:
+        with self._lock:
+            return self._conn.execute(sql, parameters).fetchall()
+
     def executescript(self, sql: str) -> sqlite3.Cursor:
         with self._lock:
             return self._conn.executescript(sql)
@@ -127,13 +136,26 @@ class ThreadSafeConnection:
         with self._lock:
             self._conn.close()
 
+    @contextmanager
+    def transaction(self):
+        """Hold the lock for the entire transaction, auto-commit or rollback."""
+        with self._lock:
+            try:
+                yield self._conn
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+
     @property
     def row_factory(self):
-        return self._conn.row_factory
+        with self._lock:
+            return self._conn.row_factory
 
     @row_factory.setter
     def row_factory(self, value):
-        self._conn.row_factory = value
+        with self._lock:
+            self._conn.row_factory = value
 
 
 def init_db(db_path: Path) -> ThreadSafeConnection:

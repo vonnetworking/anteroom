@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import re
 import shutil
+import socket
 from contextlib import AsyncExitStack
 from typing import Any
 from urllib.parse import urlparse
@@ -24,9 +26,11 @@ _BLOCKED_NETWORKS = [
     ipaddress.ip_network("fe80::/10"),
 ]
 
+_SHELL_META_RE = re.compile(r"[;&|`$(){}!<>\n\r]")
+
 
 def _validate_sse_url(url: str) -> None:
-    """Block SSE URLs pointing to internal/metadata endpoints."""
+    """Block SSE URLs pointing to internal/metadata endpoints (with DNS resolution)."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise ValueError(f"Unsupported URL scheme: {parsed.scheme}")
@@ -41,6 +45,22 @@ def _validate_sse_url(url: str) -> None:
     except ValueError as e:
         if "Blocked" in str(e):
             raise
+        try:
+            infos = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+            for _family, _type, _proto, _canon, sockaddr in infos:
+                resolved_addr = ipaddress.ip_address(sockaddr[0])
+                for network in _BLOCKED_NETWORKS:
+                    if resolved_addr in network:
+                        raise ValueError(f"Hostname '{hostname}' resolves to blocked IP: {sockaddr[0]}")
+        except socket.gaierror:
+            raise ValueError(f"Cannot resolve hostname: {hostname}")
+
+
+def _validate_tool_args(arguments: dict[str, Any]) -> None:
+    """Reject tool arguments containing shell metacharacters in string values."""
+    for key, value in arguments.items():
+        if isinstance(value, str) and _SHELL_META_RE.search(value):
+            raise ValueError(f"Tool argument '{key}' contains disallowed characters")
 
 
 def _validate_command(command: str) -> None:
@@ -87,6 +107,13 @@ class McpManager:
                     tools_result = await session.list_tools()
                     tool_count = 0
                     for tool in tools_result.tools:
+                        if tool.name in self._tool_to_server:
+                            logger.warning(
+                                "Tool name collision: '%s' from server '%s' shadows existing tool from '%s'",
+                                tool.name,
+                                config.name,
+                                self._tool_to_server[tool.name],
+                            )
                         tool_entry = {
                             "name": tool.name,
                             "server_name": config.name,
@@ -117,6 +144,13 @@ class McpManager:
                         tools_result = await session.list_tools()
                         tool_count = 0
                         for tool in tools_result.tools:
+                            if tool.name in self._tool_to_server:
+                                logger.warning(
+                                    "Tool name collision: '%s' from server '%s' shadows existing tool from '%s'",
+                                    tool.name,
+                                    config.name,
+                                    self._tool_to_server[tool.name],
+                                )
                             tool_entry = {
                                 "name": tool.name,
                                 "server_name": config.name,
@@ -166,6 +200,8 @@ class McpManager:
         server_name = self._tool_to_server.get(tool_name)
         if not server_name or server_name not in self._sessions:
             raise ValueError(f"Tool '{tool_name}' not found in any connected MCP server")
+
+        _validate_tool_args(arguments)
 
         session = self._sessions[server_name]
         result = await session.call_tool(tool_name, arguments)
