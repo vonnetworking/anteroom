@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import sys
 import webbrowser
@@ -28,6 +29,21 @@ def _print_setup_guide(config_path: Path) -> None:
     )
 
 
+def _load_config_or_exit() -> tuple[Path, object]:
+    config_path = _get_config_path()
+    if not config_path.exists():
+        print(f"No configuration file found at {config_path}", file=sys.stderr)
+        _print_setup_guide(config_path)
+        sys.exit(1)
+    try:
+        config = load_config()
+    except ValueError as e:
+        print(f"Configuration error: {e}", file=sys.stderr)
+        _print_setup_guide(config_path)
+        sys.exit(1)
+    return config_path, config
+
+
 async def _validate_ai_connection(config) -> None:
     from .services.ai_service import AIService
 
@@ -42,20 +58,56 @@ async def _validate_ai_connection(config) -> None:
         print("  The app will start, but chat may not work until the AI service is reachable.", file=sys.stderr)
 
 
-def main() -> None:
-    config_path = _get_config_path()
+async def _test_connection(config) -> None:
+    from .services.ai_service import AIService
 
-    if not config_path.exists():
-        print(f"No configuration file found at {config_path}", file=sys.stderr)
-        _print_setup_guide(config_path)
-        sys.exit(1)
+    ai_service = AIService(config.ai)
 
+    print("Config:")
+    print(f"  Endpoint: {config.ai.base_url}")
+    print(f"  Model:    {config.ai.model}")
+    print(f"  SSL:      {'enabled' if config.ai.verify_ssl else 'disabled'}")
+
+    print("\n1. Listing models...")
     try:
-        config = load_config()
-    except ValueError as e:
-        print(f"Configuration error: {e}", file=sys.stderr)
-        _print_setup_guide(config_path)
+        valid, message, models = await ai_service.validate_connection()
+        if valid:
+            print(f"   OK - {len(models)} model(s) available")
+            for m in models[:10]:
+                print(f"     - {m}")
+        else:
+            print(f"   FAILED - {message}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"   FAILED - {e}")
         sys.exit(1)
+
+    print(f"\n2. Sending test prompt to {config.ai.model}...")
+    try:
+        response = await ai_service.client.chat.completions.create(
+            model=config.ai.model,
+            messages=[{"role": "user", "content": "Say hello in one sentence."}],
+            max_tokens=50,
+        )
+        reply = response.choices[0].message.content or "(empty response)"
+        print(f"   OK - Response: {reply.strip()}")
+    except Exception as e:
+        print(f"   FAILED - {e}")
+        sys.exit(1)
+
+    print("\nAll checks passed.")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="parlor", description="Parlor - a private parlor for AI conversation")
+    parser.add_argument("--test", action="store_true", help="Test connection settings and exit")
+    args = parser.parse_args()
+
+    config_path, config = _load_config_or_exit()
+
+    if args.test:
+        asyncio.run(_test_connection(config))
+        return
 
     print(f"Config loaded from {config_path}")
     print(f"  AI endpoint: {config.ai.base_url}")
