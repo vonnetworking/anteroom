@@ -497,14 +497,23 @@ The new model applies to all subsequent turns in the current session. The conver
 | `/help` | Show all commands, input syntax, and keyboard shortcuts |
 | `/quit`, `/exit` | Exit the REPL |
 
+### Input & Prompt
+
+The `you>` prompt is displayed in **bright cyan bold** for clear visual distinction from AI responses.
+
+**Multiline input**: `Enter` submits your message. `Alt+Enter` inserts a newline. Continuation lines are indented to align under the prompt text.
+
+**Paste collapsing**: When you paste more than 6 lines, the terminal display automatically collapses to show the first 3 lines plus `... (N more lines)`. The full content is still sent to the AI --- only the visual display is truncated to keep your terminal readable.
+
 ### Keyboard Shortcuts
 
 | Shortcut | Action |
 |---|---|
+| `Enter` | Submit message |
+| `Alt+Enter` | Insert a newline (multiline input) |
 | `Escape` | Cancel the current AI response |
 | `Ctrl+C` | Clear current input. If input is empty, exit the REPL. During AI generation, also cancels. |
 | `Ctrl+D` | Exit the REPL (EOF) |
-| `Alt+Enter` | Insert a newline (multiline input) |
 | `Tab` | Autocomplete (see below) |
 
 ### Tab Completion
