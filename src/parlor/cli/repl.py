@@ -524,7 +524,7 @@ async def _run_repl(
             ai_messages = _load_conversation_messages(db, resume_conversation_id)
             is_first_message = False
             renderer.console.print(
-                f"[dim]Resumed: {conv.get('title', 'Untitled')} ({len(ai_messages)} messages)[/dim]\n"
+                f"[grey62]Resumed: {conv.get('title', 'Untitled')} ({len(ai_messages)} messages)[/grey62]\n"
             )
         else:
             renderer.render_error(f"Conversation {resume_conversation_id} not found, starting new")
@@ -561,7 +561,7 @@ async def _run_repl(
                 conv = storage.create_conversation(db)
                 ai_messages = []
                 is_first_message = True
-                renderer.console.print("[dim]New conversation started[/dim]\n")
+                renderer.console.print("[grey62]New conversation started[/grey62]\n")
                 continue
             elif cmd == "/tools":
                 renderer.render_tools(all_tool_names)
@@ -579,10 +579,10 @@ async def _run_repl(
                     ai_messages = _load_conversation_messages(db, conv["id"])
                     is_first_message = False
                     renderer.console.print(
-                        f"[dim]Resumed: {conv.get('title', 'Untitled')} ({len(ai_messages)} messages)[/dim]\n"
+                        f"[grey62]Resumed: {conv.get('title', 'Untitled')} ({len(ai_messages)} messages)[/grey62]\n"
                     )
                 else:
-                    renderer.console.print("[dim]No previous conversations[/dim]\n")
+                    renderer.console.print("[grey62]No previous conversations[/grey62]\n")
                 continue
             elif cmd == "/list":
                 convs = storage.list_conversations(db, limit=20)
@@ -591,11 +591,11 @@ async def _run_repl(
                     for i, c in enumerate(convs):
                         msg_count = c.get("message_count", 0)
                         renderer.console.print(
-                            f"  {i + 1}. {c['title']} ({msg_count} msgs) [dim]{c['id'][:8]}...[/dim]"
+                            f"  {i + 1}. {c['title']} ({msg_count} msgs) [grey62]{c['id'][:8]}...[/grey62]"
                         )
                     renderer.console.print("  Use [bold]/resume <number>[/bold] or [bold]/resume <id>[/bold]\n")
                 else:
-                    renderer.console.print("[dim]No conversations[/dim]\n")
+                    renderer.console.print("[grey62]No conversations[/grey62]\n")
                 continue
             elif cmd == "/skills":
                 if skill_registry:
@@ -603,30 +603,30 @@ async def _run_repl(
                     if skills:
                         renderer.console.print("\n[bold]Available skills:[/bold]")
                         for s in skills:
-                            renderer.console.print(f"  /{s.name} - {s.description} [dim]({s.source})[/dim]")
+                            renderer.console.print(f"  /{s.name} - {s.description} [grey62]({s.source})[/grey62]")
                         renderer.console.print()
                     else:
                         renderer.console.print(
-                            "[dim]No skills loaded. Add .yaml files to"
-                            " ~/.parlor/skills/ or .parlor/skills/[/dim]\n"
+                            "[grey62]No skills loaded. Add .yaml files to"
+                            " ~/.parlor/skills/ or .parlor/skills/[/grey62]\n"
                         )
                 continue
             elif cmd == "/model":
                 parts = user_input.split(maxsplit=1)
                 if len(parts) < 2:
-                    renderer.console.print(f"[dim]Current model: {current_model}[/dim]")
-                    renderer.console.print("[dim]Usage: /model <model_name>[/dim]\n")
+                    renderer.console.print(f"[grey62]Current model: {current_model}[/grey62]")
+                    renderer.console.print("[grey62]Usage: /model <model_name>[/grey62]\n")
                     continue
                 new_model = parts[1].strip()
                 current_model = new_model
                 ai_service = AIService(config.ai)
                 ai_service.config.model = new_model
-                renderer.console.print(f"[dim]Switched to model: {new_model}[/dim]\n")
+                renderer.console.print(f"[grey62]Switched to model: {new_model}[/grey62]\n")
                 continue
             elif cmd == "/resume":
                 parts = user_input.split(maxsplit=1)
                 if len(parts) < 2:
-                    renderer.console.print("[dim]Usage: /resume <number> or /resume <conversation_id>[/dim]\n")
+                    renderer.console.print("[grey62]Usage: /resume <number> or /resume <conversation_id>[/grey62]\n")
                     continue
                 target = parts[1].strip()
                 resolved_id = None
@@ -646,7 +646,7 @@ async def _run_repl(
                     ai_messages = _load_conversation_messages(db, conv["id"])
                     is_first_message = False
                     renderer.console.print(
-                        f"[dim]Resumed: {conv.get('title', 'Untitled')} ({len(ai_messages)} messages)[/dim]\n"
+                        f"[grey62]Resumed: {conv.get('title', 'Untitled')} ({len(ai_messages)} messages)[/grey62]\n"
                     )
                 else:
                     renderer.render_error(f"Conversation not found: {resolved_id}")
@@ -665,12 +665,12 @@ async def _run_repl(
         token_estimate = _estimate_tokens(ai_messages)
         if token_estimate > _CONTEXT_AUTO_COMPACT_TOKENS:
             renderer.console.print(
-                f"[dim yellow]Context approaching limit (~{token_estimate:,} tokens). Auto-compacting...[/dim yellow]"
+                f"[yellow]Context approaching limit (~{token_estimate:,} tokens). Auto-compacting...[/yellow]"
             )
             await _compact_messages(ai_service, ai_messages, db, conv["id"])
         elif token_estimate > _CONTEXT_WARN_TOKENS:
             renderer.console.print(
-                f"[dim yellow]Context: ~{token_estimate:,} tokens. Use /compact to free space.[/dim yellow]"
+                f"[yellow]Context: ~{token_estimate:,} tokens. Use /compact to free space.[/yellow]"
             )
 
         # Store user message
@@ -768,7 +768,7 @@ async def _compact_messages(
 ) -> None:
     """Summarize conversation history to reduce context size."""
     if len(ai_messages) < 4:
-        renderer.console.print("[dim]Not enough messages to compact[/dim]\n")
+        renderer.console.print("[grey62]Not enough messages to compact[/grey62]\n")
         return
 
     original_count = len(ai_messages)
@@ -798,7 +798,7 @@ async def _compact_messages(
     )
 
     try:
-        renderer.console.print("[dim]Generating summary...[/dim]")
+        renderer.console.print("[grey62]Generating summary...[/grey62]")
         response = await ai_service.client.chat.completions.create(
             model=ai_service.config.model,
             messages=[{"role": "user", "content": summary_prompt}],
@@ -819,4 +819,4 @@ async def _compact_messages(
 
     new_tokens = _estimate_tokens(ai_messages)
     renderer.render_compact_done(original_count, 1)
-    renderer.console.print(f"  [dim]~{original_tokens:,} -> ~{new_tokens:,} tokens[/dim]\n")
+    renderer.console.print(f"  [grey62]~{original_tokens:,} -> ~{new_tokens:,} tokens[/grey62]\n")

@@ -86,7 +86,7 @@ def render_tool_call_start(tool_name: str, arguments: dict[str, Any]) -> None:
     args_str = json.dumps(arguments, indent=None, default=str)
     if len(args_str) > 200:
         args_str = args_str[:200] + "..."
-    console.print(f"\n  [dim]> {escape(tool_name)}({escape(args_str)})[/dim]")
+    console.print(f"\n  [grey62]> {escape(tool_name)}({escape(args_str)})[/grey62]")
 
 
 def render_tool_call_end(tool_name: str, status: str, output: Any) -> None:
@@ -111,7 +111,7 @@ def render_tool_call_end(tool_name: str, status: str, output: Any) -> None:
             output_str = f" - {stdout}" if stdout else ""
     text = Text(
         f"  < {tool_name}: {status}{output_str}",
-        style=f"dim {style}",
+        style=style,
     )
     console.print(text)
 
@@ -168,7 +168,7 @@ def render_tools(tool_names: list[str]) -> None:
 
 def render_compact_done(original: int, compacted: int) -> None:
     console.print(
-        f"\n[dim]Compacted {original} messages -> {compacted} messages[/dim]"
+        f"\n[grey62]Compacted {original} messages -> {compacted} messages[/grey62]"
     )
 
 
@@ -188,7 +188,7 @@ def render_context_footer(
     elif pct_full > 50:
         color = "yellow"
     else:
-        color = "dim"
+        color = "grey62"
 
     bar_width = 20
     filled = int(bar_width * pct_full / 100)
