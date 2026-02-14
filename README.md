@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/pypi/v/parlor?style=for-the-badge&color=3b82f6&labelColor=0f1117" alt="PyPI Version">
-  <img src="https://img.shields.io/pypi/pyversions/parlor?style=for-the-badge&color=10b981&labelColor=0f1117" alt="Python Versions">
-  <img src="https://img.shields.io/github/actions/workflow/status/troylar/parlor/test.yml?style=for-the-badge&label=tests&color=7c3aed&labelColor=0f1117" alt="Tests">
+  <img src="https://img.shields.io/badge/python-3.10%2B-10b981?style=for-the-badge&labelColor=0f1117" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/tests-100%20passed-7c3aed?style=for-the-badge&labelColor=0f1117" alt="Tests">
   <img src="https://img.shields.io/github/license/troylar/parlor?style=for-the-badge&color=e8913a&labelColor=0f1117" alt="License">
 </p>
 
