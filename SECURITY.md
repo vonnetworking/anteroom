@@ -6,8 +6,9 @@ Parlor is designed with security as a core principle. This document outlines the
 
 | Version | Supported |
 |---------|-----------|
-| 0.3.x   | Yes        |
-| < 0.3   | No         |
+| 0.9.x   | Yes       |
+| 0.8.x   | Yes       |
+| < 0.8   | No        |
 
 ## Reporting a Vulnerability
 
@@ -30,6 +31,7 @@ Parlor is a **personal, single-user application** intended to run on a user's lo
 | Cross-site scripting (XSS) | Content Security Policy, DOMPurify sanitization | Implemented |
 | Clickjacking | X-Frame-Options: DENY, frame-ancestors 'none' | Implemented |
 | MIME sniffing | X-Content-Type-Options: nosniff | Implemented |
+| Transport security | HSTS header (max-age=31536000; includeSubDomains) | Implemented |
 | File upload abuse | MIME allowlist + magic-byte verification (filetype) | Implemented |
 | Path traversal (attachments) | Filename sanitization + resolved path validation | Implemented |
 | Malicious MCP servers (SSRF) | DNS resolution validation, private IP rejection | Implemented |
@@ -39,6 +41,7 @@ Parlor is a **personal, single-user application** intended to run on a user's lo
 | Oversized payloads | 15 MB request body limit, 10 MB attachment limit | Implemented |
 | Information leakage | Generic error messages, no stack traces in responses | Implemented |
 | Sensitive data in cache | Cache-Control: no-store on all API responses | Implemented |
+| API key exposure | Token provider with in-memory caching, no logging of secrets | Implemented |
 
 ## OWASP ASVS v4.0 Compliance
 
@@ -79,18 +82,26 @@ Parlor targets **ASVS Level 1** (Opportunistic) compliance for a single-user loc
 | V5.3 Output encoding | Pass | JSON serialization, CSP headers |
 | V5.5 File upload validation | Pass | MIME allowlist + magic-byte verification |
 
+### V6: Cryptography
+
+| Requirement | Status | Notes |
+|------------|--------|-------|
+| V6.2 Random values | Pass | secrets.token_urlsafe(32) for tokens, CSPRNG-backed |
+| V6.3 Secret management | Pass | API keys via env vars or api_key_command, never hardcoded |
+
 ### V7: Error Handling and Logging
 
 | Requirement | Status | Notes |
 |------------|--------|-------|
 | V7.1 Generic error messages | Pass | No stack traces or internal details exposed |
 | V7.2 Security event logging | Pass | Dedicated parlor.security logger |
+| V7.3 No sensitive data in logs | Pass | API keys/tokens never logged |
 
 ### V8: Data Protection
 
 | Requirement | Status | Notes |
 |------------|--------|-------|
-| V8.1 Sensitive data in transit | Pass | Secure cookie flag, HTTPS support |
+| V8.1 Sensitive data in transit | Pass | Secure cookie flag, HTTPS support, HSTS header |
 | V8.2 Anti-caching | Pass | Cache-Control: no-store on API responses |
 | V8.3 Sensitive data in responses | Pass | API key presence shown as boolean, never exposed |
 
@@ -98,7 +109,8 @@ Parlor targets **ASVS Level 1** (Opportunistic) compliance for a single-user loc
 
 | Requirement | Status | Notes |
 |------------|--------|-------|
-| V9.1 TLS for external calls | Partial | Configurable via verify_ssl (default: enabled) |
+| V9.1 TLS for external calls | Pass | verify_ssl default: enabled, HSTS enforced |
+| V9.2 HSTS | Pass | Strict-Transport-Security: max-age=31536000; includeSubDomains |
 
 ### V13: API Security
 
@@ -112,7 +124,7 @@ Parlor targets **ASVS Level 1** (Opportunistic) compliance for a single-user loc
 
 | Requirement | Status | Notes |
 |------------|--------|-------|
-| V14.1 Security headers | Pass | CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy |
+| V14.1 Security headers | Pass | CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS |
 | V14.2 Dependency management | Pass | pip-audit in CI, Dependabot for automated updates |
 | V14.4 HTTP security headers | Pass | Full suite applied via SecurityHeadersMiddleware |
 
@@ -124,13 +136,29 @@ Browser ──HTTPS──▶ Parlor (FastAPI)
                       ├── BearerTokenMiddleware (auth)
                       ├── RateLimitMiddleware (120/min)
                       ├── MaxBodySizeMiddleware (15 MB)
-                      ├── SecurityHeadersMiddleware (CSP, etc.)
+                      ├── SecurityHeadersMiddleware (CSP, HSTS, etc.)
                       ├── CSRF validation (double-submit)
                       │
                       ├──▶ SQLite (local, file-based)
                       ├──▶ AI Backend (OpenAI-compatible)
+                      │      └── TokenProvider (auto-refresh on auth failure)
                       └──▶ MCP Servers (validated, SSRF-protected)
 ```
+
+## API Key Management
+
+Parlor supports two methods for API key configuration:
+
+1. **Static key**: Set `ai.api_key` in config.yaml or `AI_CHAT_API_KEY` env var
+2. **Dynamic key via command**: Set `ai.api_key_command` in config.yaml or `AI_CHAT_API_KEY_COMMAND` env var
+
+The `api_key_command` feature runs an external command to obtain API keys with automatic transparent refresh:
+
+- Command is executed via `subprocess.run()` with `shlex.split()` — **no shell=True**, preventing shell injection
+- 30-second execution timeout prevents hanging commands
+- Token is cached in memory only, never written to disk or logged
+- On authentication failure (HTTP 401), the command is re-run automatically, the client is rebuilt, and the request is retried
+- Empty output and non-zero exit codes are rejected with clear error messages
 
 ## Configuration Hardening
 
@@ -138,6 +166,7 @@ For production-like deployments (non-localhost):
 
 - `Secure` flag automatically set on cookies
 - SSL verification enabled by default for AI backend
+- HSTS header enforced on all responses
 - All security headers enforced on every response
 - Rate limiting active on all endpoints
 
