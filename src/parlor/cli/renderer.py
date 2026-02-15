@@ -298,9 +298,6 @@ def render_tool_call_start(tool_name: str, arguments: dict[str, Any]) -> None:
         if len(args_str) > 200:
             args_str = args_str[:200] + "..."
         console.print(f"  [grey62]> {escape(tool_name)}({escape(args_str)})[/grey62]")
-    else:
-        # Compact/detailed: print dim breadcrumb immediately (no spinner)
-        console.print(f"  [dim]● {escape(summary)} ...[/dim]", highlight=False)
 
 
 def render_tool_call_end(tool_name: str, status: str, output: Any) -> None:
