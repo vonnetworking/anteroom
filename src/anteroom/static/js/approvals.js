@@ -50,10 +50,16 @@
                         body: JSON.stringify({ approval_id, approved })
                     });
                 } else {
+                    // Fall back to fetch(), but still include CSRF header (required for POST /api/* when using cookie auth).
+                    const match = document.cookie.split('; ').find(c => c.startsWith('anteroom_csrf='));
+                    const csrf = match ? match.split('=')[1] : '';
                     await fetch('/api/approvals/respond', {
                         method: 'POST',
                         credentials: 'same-origin',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': csrf,
+                        },
                         body: JSON.stringify({ approval_id, approved })
                     });
                 }
