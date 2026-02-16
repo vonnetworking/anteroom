@@ -11,7 +11,7 @@
 
 <h1 align="center">Anteroom</h1>
 
-<h3 align="center">The room before the room &mdash; where you prepare before meeting the machine.</h3>
+<h3 align="center">The room before the room &mdash; a secure, private space between you and the AI.</h3>
 
 <p align="center">
   Self-hosted ChatGPT-style web UI <strong>and</strong> agentic CLI that connects to any OpenAI-compatible API.<br>
@@ -33,7 +33,7 @@
 
 ## Why Anteroom?
 
-An **anteroom** is the small, private chamber you pass through before entering a grander space --- a place to collect yourself, set your terms, and decide what comes next. That's exactly what this is: *your* room, on *your* machine, where you control the conversation before it reaches any AI.
+An **anteroom** is the private chamber just outside a larger hall --- a controlled space where you decide who enters and what leaves. That's exactly what this is: a secure layer on *your* machine between you and any AI, where your conversations never touch someone else's cloud.
 
 Anteroom connects to **any** OpenAI-compatible endpoint --- your company's internal API, OpenAI, Azure, Ollama, LM Studio, or anything else that speaks the OpenAI protocol. Built to [OWASP ASVS L1](SECURITY.md) standards because your conversations deserve real security, not security theater.
 
