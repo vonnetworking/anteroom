@@ -473,13 +473,37 @@ async def run_cli(
             renderer.console.print("[grey62]Cannot prompt for confirmation; cancelling.[/grey62]")
             return False
 
-        title = "Destructive command"
-        text = f"{message}\n\nProceed?"
-
+        # Prefer a minimal inline prompt over a full-screen modal.
+        # prompt_toolkit owns terminal input in the REPL; using its prompt is reliable and
+        # less jarring than yes_no_dialog().
         try:
-            return bool(await yes_no_dialog(title=title, text=text).run_async())
-        except (EOFError, KeyboardInterrupt):
-            return False
+            from prompt_toolkit import PromptSession
+        except Exception:
+            PromptSession = None  # type: ignore[assignment]
+
+        if PromptSession is None:
+            title = "Destructive command"
+            text = f"{message}\n\nProceed?"
+            try:
+                return bool(await yes_no_dialog(title=title, text=text).run_async())
+            except (EOFError, KeyboardInterrupt):
+                return False
+
+        session = PromptSession()
+        prompt = f"\n{message}\nProceed? [y/N] "
+
+        while True:
+            try:
+                ans = (await session.prompt_async(prompt)).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                return False
+
+            if ans in ("y", "yes"):
+                return True
+            if ans in ("", "n", "no"):
+                return False
+
+            renderer.console.print("[grey62]Please answer 'y' or 'n'.[/grey62]")
 
     tool_registry.set_confirm_callback(_confirm_destructive)
 
