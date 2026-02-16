@@ -1,4 +1,4 @@
-"""REPL loop and one-shot mode for the Parlor CLI."""
+"""REPL loop and one-shot mode for the Anteroom CLI."""
 
 from __future__ import annotations
 
@@ -455,10 +455,29 @@ async def run_cli(
 
     # Set up confirmation prompt for destructive operations
     async def _confirm_destructive(message: str) -> bool:
-        renderer.console.print(f"\n[yellow bold]Warning:[/yellow bold] {message}")
+        """Confirm a destructive operation.
+
+        This callback may be invoked while the REPL is running prompt_toolkit with patch_stdout.
+        Reading stdin via input()/Rich Confirm can deadlock or fail to receive input (prompt
+        gets "stuck") because prompt_toolkit owns the terminal input.
+
+        We therefore display a prompt_toolkit dialog and await its async result.
+        """
+
+        # Import lazily to avoid pulling prompt_toolkit in one-shot mode unnecessarily.
         try:
-            answer = input("  Proceed? [y/N] ").strip().lower()
-            return answer in ("y", "yes")
+            from prompt_toolkit.shortcuts import yes_no_dialog
+        except Exception:
+            # If prompt_toolkit isn't available for some reason, fail safe (no destructive action).
+            renderer.console.print(f"\n[yellow bold]Warning:[/yellow bold] {message}")
+            renderer.console.print("[grey62]Cannot prompt for confirmation; cancelling.[/grey62]")
+            return False
+
+        title = "Destructive command"
+        text = f"{message}\n\nProceed?"
+
+        try:
+            return bool(await yes_no_dialog(title=title, text=text).run_async())
         except (EOFError, KeyboardInterrupt):
             return False
 
@@ -692,7 +711,7 @@ async def _run_repl(
     from prompt_toolkit.history import FileHistory
     from prompt_toolkit.key_binding import KeyBindings
 
-    class ParlorCompleter(Completer):
+    class AnteroomCompleter(Completer):
         """Tab completer for / commands and @ file paths."""
 
         def __init__(self, commands: list[str], skill_names: list[str], wd: str) -> None:
@@ -761,7 +780,7 @@ async def _run_repl(
         "exit",
     ]
     skill_names = [s.name for s in skill_registry.list_skills()] if skill_registry else []
-    completer = ParlorCompleter(commands, skill_names, working_dir)
+    completer = AnteroomCompleter(commands, skill_names, working_dir)
 
     def _rebuild_tools() -> None:
         """Rebuild the tool list after MCP changes."""
