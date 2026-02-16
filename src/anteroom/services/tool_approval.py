@@ -70,7 +70,12 @@ async def confirm_destructive_via_event_bus(
 
 
 def resolve_approval(approval_id: str, approved: bool) -> bool:
-    fut = _PENDING.get(approval_id)
+    """Resolve a pending approval.
+
+    Returns True if a pending approval was found and resolved.
+    """
+    fut = _PENDING.pop(approval_id, None)
+    _METADATA.pop(approval_id, None)
     if not fut or fut.done():
         return False
     fut.set_result(bool(approved))
