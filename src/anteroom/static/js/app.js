@@ -480,6 +480,20 @@ const App = (() => {
             Sidebar.refresh();
         });
 
+        _eventSource.addEventListener('destructive_approval_requested', (e) => {
+            const data = JSON.parse(e.data);
+            if (window.Approvals && typeof window.Approvals.show === 'function') {
+                window.Approvals.show(data);
+            } else {
+                const ok = confirm(data.message || 'Destructive action requested. Proceed?');
+                window.App.api('/api/approvals/respond', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ approval_id: data.approval_id, approved: ok })
+                }).catch(() => {});
+            }
+        });
+
         _eventSource.onerror = () => {
             // Reconnect after a delay
             setTimeout(() => {

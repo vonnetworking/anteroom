@@ -107,6 +107,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     tool_registry = ToolRegistry()
     working_dir = os.getcwd()
     register_default_tools(tool_registry, working_dir=working_dir)
+
+    # Web UI needs an explicit approval flow for destructive tool invocations.
+    # The ToolRegistry confirmation callback is async and can be used by both CLI and web.
+    from .services.tool_approval import confirm_destructive_via_event_bus
+
+    tool_registry.set_confirm_callback(lambda message: confirm_destructive_via_event_bus(app, message))
+
     app.state.tool_registry = tool_registry
     logger.info(f"Built-in tools: {len(tool_registry.list_tools())} registered (cwd: {working_dir})")
 
@@ -352,6 +359,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(databases.router, prefix="/api")
     app.include_router(events.router, prefix="/api")
     app.include_router(search.router, prefix="/api")
+
+    from .routers import approvals
+
+    app.include_router(approvals.router, prefix="/api")
 
     @app.post("/api/logout")
     async def logout():
