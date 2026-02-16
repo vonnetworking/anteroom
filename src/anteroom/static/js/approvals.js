@@ -42,11 +42,21 @@
 
         async function respond(approved) {
             try {
-                await window.App.api('/api/approvals/respond', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ approval_id, approved })
-                });
+                // Prefer the app's API helper (adds db param + CSRF). Fall back to fetch.
+                if (window.App && typeof window.App.api === 'function') {
+                    await window.App.api('/api/approvals/respond', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ approval_id, approved })
+                    });
+                } else {
+                    await fetch('/api/approvals/respond', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ approval_id, approved })
+                    });
+                }
             } finally {
                 cleanup();
             }
