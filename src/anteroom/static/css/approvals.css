@@ -69,6 +69,14 @@
 }
 
 #approval-modal-overlay .btn {
-  min-height: 36px;
+  min-height: 40px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+
+#approval-modal-overlay .approval-actions .btn {
+  border-radius: 10px;
 }
 
