@@ -199,6 +199,7 @@ class AppSettings:
     port: int = 8080
     data_dir: Path = field(default_factory=lambda: Path.home() / ".anteroom")
     tls: bool = False
+    enable_github: bool = False
 
 
 @dataclass
