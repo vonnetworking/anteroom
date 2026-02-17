@@ -154,9 +154,6 @@ const App = (() => {
         Sidebar.init();
         Palette.init();
         Attachments.init();
-        if (window.GitHub && typeof window.GitHub.init === 'function') {
-            window.GitHub.init();
-        }
         initRawToggle();
         _initMobileSidebar();
         _renderThemePicker();

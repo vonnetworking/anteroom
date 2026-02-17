@@ -420,7 +420,6 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         conversations,
         databases,
         events,
-        github,
         projects,
         search,
     )
@@ -433,7 +432,6 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(databases.router, prefix="/api")
     app.include_router(events.router, prefix="/api")
     app.include_router(search.router, prefix="/api")
-    app.include_router(github.router, prefix="/api")
 
     @app.post("/api/logout")
     async def logout():
