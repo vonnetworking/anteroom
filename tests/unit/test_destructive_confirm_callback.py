@@ -28,7 +28,7 @@ async def test_confirm_destructive_publishes_and_waits(monkeypatch) -> None:
     config = SimpleNamespace(shared_databases=[SimpleNamespace(name="team")])
 
     async def confirm(message: str) -> bool:
-        approval_id = await mgr.request(message)
+        approval_id = await mgr.request(message, owner="local")
         event = {
             "type": "destructive_approval_requested",
             "data": {"approval_id": approval_id, "message": message},
@@ -41,7 +41,7 @@ async def test_confirm_destructive_publishes_and_waits(monkeypatch) -> None:
         # Resolve asynchronously as if UI clicked Proceed
         async def _resolver():
             await asyncio.sleep(0)
-            await mgr.resolve(approval_id, True)
+            await mgr.resolve(approval_id, True, owner="local")
 
         asyncio.create_task(_resolver())
         return await mgr.wait(approval_id, timeout_s=1.0)

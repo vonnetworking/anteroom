@@ -14,15 +14,12 @@ def test_respond_approval_ok_and_resolved_flag() -> None:
 
     client = TestClient(app)
 
-    # Create a pending approval
-    approval_id = TestClient(app).app.state.approval_manager  # type: ignore[attr-defined]
-    # Access the manager from state directly (same instance)
     mgr: ApprovalManager = app.state.approval_manager
 
     import anyio
 
     async def _req_id() -> str:
-        return await mgr.request("Danger")
+        return await mgr.request("Danger", owner="local")
 
     aid = anyio.run(_req_id)
 

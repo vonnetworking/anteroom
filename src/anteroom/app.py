@@ -118,11 +118,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from .services.approvals import ApprovalManager
 
     approval_manager = ApprovalManager()
+    approval_manager.start_cleanup_task(expire_after_s=600.0, interval_s=60.0)
     app.state.approval_manager = approval_manager
 
     async def _confirm_destructive(message: str) -> bool:
         # Broadcast a UI event and wait for response.
-        approval_id = await approval_manager.request(message)
+        approval_id = await approval_manager.request(message, owner="local")
         # Publish into the global channel(s) Web UI clients subscribe to.
         # Default UI subscribes to global:{db} based on its current db query param.
         event = {
@@ -166,6 +167,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     if hasattr(app.state, "embedding_worker") and app.state.embedding_worker:
         app.state.embedding_worker.stop()
+    if hasattr(app.state, "approval_manager"):
+        try:
+            await app.state.approval_manager.stop_cleanup_task()
+        except Exception:
+            logger.warning("Failed to stop approval cleanup task")
+
     if hasattr(app.state, "event_bus"):
         app.state.event_bus.stop_polling()
     if app.state.db:

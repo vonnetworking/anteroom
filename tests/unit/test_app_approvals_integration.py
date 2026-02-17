@@ -133,7 +133,7 @@ async def test_lifespan_wires_confirm_callback_and_publishes(
         else:
             raise AssertionError("approval id was not created")
 
-        ok = await mgr.resolve(approval_id, True)
+        ok = await mgr.resolve(approval_id, True, owner="local")
         assert ok is True
         assert await task is True
 
